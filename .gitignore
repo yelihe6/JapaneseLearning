@@ -31,6 +31,8 @@ project/auth-server/prisma/dev.db
 
 # Bolt / build cache / SBT
 **/target
+**/.bolt
+**/.bsp
 
 # Misc
 *.suo
