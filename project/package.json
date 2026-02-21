@@ -1,7 +1,8 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "japanese-kana-trainer",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "日语假名学习应用 - 平假名、片假名认读、听写与测验",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +12,6 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

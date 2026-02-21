@@ -6,9 +6,12 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   justLoggedIn: boolean;
+  /** 登录成功但尚未完成跳转时的用户，用于先显示成功弹窗再跳转 */
+  pendingLoginUser: User | null;
 }
 
 interface AuthContextValue extends AuthState {
+  completePendingLogin: () => void;
   login: (email: string, password: string) => Promise<boolean>;
   register: (
     email: string,
@@ -16,7 +19,7 @@ interface AuthContextValue extends AuthState {
     captchaId: string,
     captchaAnswer: string,
     options?: { onInvalidCaptcha?: () => void }
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   updateProfile: (displayName: string) => Promise<void>;
@@ -32,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading: true,
     error: null,
     justLoggedIn: false,
+    pendingLoginUser: null,
   });
 
   const setError = (error: string | null) => {
@@ -68,21 +72,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const { user } = await authService.login({ email, password });
-      setUser(user);
-      setState((prev) => ({ ...prev, justLoggedIn: true }));
-      // 1.1 秒后清除标志（略长于弹窗显示时间）
-      setTimeout(() => {
-        setState((prev) => ({ ...prev, justLoggedIn: false }));
-      }, 1100);
+      // 先设置 pendingLoginUser，让 App 在登录页显示成功弹窗，弹窗关闭后再完成跳转
+      setState((prev) => ({ ...prev, pendingLoginUser: user, justLoggedIn: false }));
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'login_failed');
+      const msg = e instanceof Error ? e.message : 'login_failed';
+      // 登录失败时统一显示「邮箱或密码错误」，避免泄露用户是否存在
+      const credentialErrors = ['user_not_found', 'wrong_password', 'invalid_input'];
+      const displayError = credentialErrors.includes(msg) ? 'invalid_credentials' : msg;
+      setError(displayError);
       setUser(null);
       return false;
     } finally {
       setLoading(false);
     }
   };
+
+  const completePendingLogin = useCallback(() => {
+    setState((prev) => {
+      if (!prev.pendingLoginUser) return prev;
+      return {
+        ...prev,
+        user: prev.pendingLoginUser,
+        pendingLoginUser: null,
+      };
+    });
+  }, []);
 
   const register = async (
     email: string,
@@ -92,22 +107,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     options?: { onInvalidCaptcha?: () => void }
   ) => {
     setError(null);
-    setLoading(true);
+    // 不设置全局 loading，避免 App 显示全屏加载导致 LoginPage 被卸载，从而无法显示注册成功弹窗
     try {
-      const { user } = await authService.register({
+      await authService.register({
         email,
         password,
         captchaId,
         captchaAnswer,
       });
-      setUser(user);
+      return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'register_failed';
       setError(msg);
       setUser(null);
       if (msg === 'invalid_captcha') options?.onInvalidCaptcha?.();
-    } finally {
-      setLoading(false);
+      return false;
     }
   };
 
@@ -155,6 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         updateProfile,
         clearError,
         setError,
+        completePendingLogin,
       }}
     >
       {children}

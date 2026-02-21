@@ -26,9 +26,12 @@ npm run dev
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/auth/register` | 注册（email, password, displayName?） |
+| GET  | `/api/auth/captcha` | 获取验证码（captchaId, image） |
+| GET  | `/api/auth/check-email?email=` | 检查邮箱是否已注册 |
+| POST | `/api/auth/register` | 注册（email, password, captchaId, captchaAnswer） |
 | POST | `/api/auth/login` | 登录（email, password） |
 | GET  | `/api/auth/me` | 获取当前登录用户（需 cookie） |
+| PATCH| `/api/auth/me` | 更新昵称（displayName） |
 | POST | `/api/auth/refresh` | 刷新 access token（需 refresh cookie） |
 | POST | `/api/auth/logout` | 登出（清除 cookie） |
 | GET  | `/health` | 健康检查 |

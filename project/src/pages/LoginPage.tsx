@@ -43,6 +43,8 @@ export function LoginPage() {
   const [captchaAnswer, setCaptchaAnswer] = useState('');
   const [emailFormatError, setEmailFormatError] = useState(false);
   const [emailTakenError, setEmailTakenError] = useState(false);
+  const [registerSuccess, setRegisterSuccess] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const emailCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailRef = useRef(email);
   emailRef.current = email;
@@ -92,6 +94,24 @@ export function LoginPage() {
     };
   }, [mode, email]);
 
+  useEffect(() => {
+    if (!registerSuccess || mode !== 'register') return;
+    // 注册成功后 2 秒关闭提示框并跳转至登录界面
+    const backToLoginTimer = setTimeout(() => {
+      setRegisterSuccess(false);
+      setMode('login');
+      setPassword('');
+      setConfirmPassword('');
+      setCaptchaId('');
+      setCaptchaImage('');
+      setCaptchaAnswer('');
+      setEmailFormatError(false);
+      setEmailTakenError(false);
+      clearError();
+    }, 2000);
+    return () => clearTimeout(backToLoginTimer);
+  }, [registerSuccess, mode, clearError]);
+
   const passwordRules = checkPasswordRules(password);
   const passwordValid = isPasswordValid(password);
   const confirmMatch = confirmPassword.length > 0 && password === confirmPassword;
@@ -104,13 +124,14 @@ export function LoginPage() {
     !!captchaId &&
     captchaAnswer.trim().length > 0;
   const submitDisabled =
-    loading ||
-    (mode === 'register' ? !canSubmitRegister : false);
+    (mode === 'login' ? loading : isRegistering || loading) ||
+    (mode === 'register' ? !canSubmitRegister || registerSuccess : false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
     if (mode === 'register') {
+      setRegisterSuccess(false);
       if (!passwordValid) {
         setError('weak_password');
         return;
@@ -121,11 +142,21 @@ export function LoginPage() {
       }
     }
     if (mode === 'login') {
+      setRegisterSuccess(false);
       await login(email, password);
     } else {
-      await register(email, password, captchaId, captchaAnswer.trim(), {
-        onInvalidCaptcha: loadCaptcha,
-      });
+      setIsRegistering(true);
+      try {
+        const ok = await register(email, password, captchaId, captchaAnswer.trim(), {
+          onInvalidCaptcha: loadCaptcha,
+        });
+        if (ok) {
+          setRegisterSuccess(true);
+          clearError();
+        }
+      } finally {
+        setIsRegistering(false);
+      }
     }
   };
 
@@ -140,6 +171,7 @@ export function LoginPage() {
     setCaptchaAnswer('');
     setEmailFormatError(false);
     setEmailTakenError(false);
+    setRegisterSuccess(false);
   };
 
   useEffect(() => {
@@ -170,6 +202,30 @@ export function LoginPage() {
     mode === 'login' ? t('auth_switch_to_register') : t('auth_switch_to_login');
 
   return (
+    <>
+      {/* 注册成功提示框 */}
+      {registerSuccess && mode === 'register' && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="register-success-title"
+        >
+          <div className="bg-white rounded-2xl shadow-2xl p-8 mx-4 max-w-sm">
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-14 h-14 bg-green-100 rounded-full mb-4">
+                <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 id="register-success-title" className="text-xl font-semibold text-gray-900">
+                {t('auth_register_success')}
+              </h2>
+            </div>
+          </div>
+        </div>
+      )}
+
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Top Navigation Bar */}
@@ -198,54 +254,45 @@ export function LoginPage() {
               role="menu"
             >
               <div className="p-1" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLanguage('zh');
-                    setLangMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
-                    language === 'zh'
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                  role="menuitem"
-                >
-                  <span className="flex-1 text-left">{t('lang_zh')}</span>
-                  {language === 'zh' && <span className="text-xs text-blue-600">●</span>}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLanguage('en');
-                    setLangMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
-                    language === 'en'
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                  role="menuitem"
-                >
-                  <span className="flex-1 text-left">{t('lang_en')}</span>
-                  {language === 'en' && <span className="text-xs text-blue-600">●</span>}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLanguage('ja');
-                    setLangMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
-                    language === 'ja'
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                  role="menuitem"
-                >
-                  <span className="flex-1 text-left">{t('lang_ja')}</span>
-                  {language === 'ja' && <span className="text-xs text-blue-600">●</span>}
-                </button>
+                {language !== 'zh' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLanguage('zh');
+                      setLangMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition-all duration-150"
+                    role="menuitem"
+                  >
+                    <span className="flex-1 text-left">{t('lang_zh')}</span>
+                  </button>
+                )}
+                {language !== 'en' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLanguage('en');
+                      setLangMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition-all duration-150"
+                    role="menuitem"
+                  >
+                    <span className="flex-1 text-left">{t('lang_en')}</span>
+                  </button>
+                )}
+                {language !== 'ja' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLanguage('ja');
+                      setLangMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition-all duration-150"
+                    role="menuitem"
+                  >
+                    <span className="flex-1 text-left">{t('lang_ja')}</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -430,7 +477,7 @@ export function LoginPage() {
               disabled={submitDisabled}
               className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
             >
-              {loading ? t('auth_loading') : submitText}
+              {(mode === 'login' ? loading : isRegistering) ? t('auth_loading') : submitText}
             </button>
           </form>
 
@@ -452,5 +499,6 @@ export function LoginPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

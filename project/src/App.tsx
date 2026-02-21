@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image as ImageIcon, Trash2, ChevronDown, LayoutGrid, Mail, MessageCircle, Pencil, LogOut, User as UserIcon, CheckCircle, X, AlertCircle, Globe } from 'lucide-react';
+import { Image as ImageIcon, Trash2, ChevronDown, LayoutGrid, Mail, MessageCircle, Pencil, LogOut, User as UserIcon, CheckCircle, AlertCircle, Globe } from 'lucide-react';
 import { KanaChart } from './components/KanaChart';
 import { Quiz } from './components/Quiz';
 import { Greetings } from './components/Greetings';
@@ -15,6 +15,29 @@ import { backgroundImageStore } from './services/backgroundImageStore';
 type Page = 'chart' | 'greetings' | 'practice' | 'profile';
 type KanaType = 'hiragana' | 'katakana';
 type PracticeMode = 'fill' | 'dictation' | 'quiz';
+
+function LoginSuccessOverlay({ onComplete }: { onComplete: () => void }) {
+  const { language } = useLanguage();
+  useEffect(() => {
+    const timer = setTimeout(onComplete, 1500);
+    return () => clearTimeout(timer);
+  }, [onComplete]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-backdrop-fade-in">
+      <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 animate-fade-in-scale">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+            <CheckCircle className="w-6 h-6 text-green-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-gray-900">{t(language, 'auth_login_success')}</h3>
+            <p className="text-gray-600 text-sm mt-1">{t(language, 'auth_login_success')}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AppInner() {
   const [page, setPage] = useState<Page>('chart');
@@ -43,20 +66,10 @@ function AppInner() {
   const appearanceRef = useRef<HTMLDivElement | null>(null);
   const [profileHoverOpen, setProfileHoverOpen] = useState(false);
 
-  const { user, logout, loading, justLoggedIn } = useAuth();
-  const [showLoginSuccessModal, setShowLoginSuccessModal] = useState(false);
+  const { user, logout, loading, pendingLoginUser, completePendingLogin } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-
-  // 检测登录成功：仅在通过 login 函数成功登录时显示（排除页面刷新和更新个人信息）
-  useEffect(() => {
-    if (justLoggedIn && user) {
-      setShowLoginSuccessModal(true);
-      const timer = setTimeout(() => {
-        setShowLoginSuccessModal(false);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [justLoggedIn, user]);
+  const [logoutConfirmClosing, setLogoutConfirmClosing] = useState(false);
+  const logoutConfirmActionRef = useRef<'cancel' | 'confirm' | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -278,7 +291,15 @@ function AppInner() {
 
   // Show login page if not authenticated
   if (!user) {
-    return <LoginPage />;
+    return (
+      <>
+        <LoginPage />
+        {/* 登录成功后先显示提示框，1.5 秒后再跳转主页面 */}
+        {pendingLoginUser && (
+          <LoginSuccessOverlay onComplete={completePendingLogin} />
+        )}
+      </>
+    );
   }
 
   const renderContent = () => {
@@ -509,13 +530,19 @@ function AppInner() {
                   <ChevronDown size={16} className="text-gray-500 flex-shrink-0" />
                 </button>
                 <div
-                  className={`absolute right-0 mt-2 w-40 rounded-xl border border-gray-200 bg-white shadow-lg z-50 transition-all duration-200 ${
+                  className={`absolute right-0 mt-2 w-40 rounded-xl border border-gray-200 bg-white shadow-lg z-50 transition-all duration-200 overflow-hidden ${
                     langMenuOpen ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1 pointer-events-none'
                   }`}
                 >
-                  <button type="button" onClick={() => { setLanguage('zh'); setLangMenuOpen(false); }} className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-t-xl transition-colors">中文</button>
-                  <button type="button" onClick={() => { setLanguage('en'); setLangMenuOpen(false); }} className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50 transition-colors">English</button>
-                  <button type="button" onClick={() => { setLanguage('ja'); setLangMenuOpen(false); }} className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-b-xl transition-colors">日本語</button>
+                  {language !== 'zh' && (
+                    <button type="button" onClick={() => { setLanguage('zh'); setLangMenuOpen(false); }} className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50 transition-colors">中文</button>
+                  )}
+                  {language !== 'en' && (
+                    <button type="button" onClick={() => { setLanguage('en'); setLangMenuOpen(false); }} className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50 transition-colors">English</button>
+                  )}
+                  {language !== 'ja' && (
+                    <button type="button" onClick={() => { setLanguage('ja'); setLangMenuOpen(false); }} className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50 transition-colors">日本語</button>
+                  )}
                 </div>
               </div>
               <div className="relative" ref={appearanceRef}>
@@ -581,34 +608,28 @@ function AppInner() {
         </div>
       </div>
 
-      {/* 登录成功弹窗 */}
-      {showLoginSuccessModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900">{t(language, 'auth_login_success')}</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowLoginSuccessModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <p className="text-gray-600 text-sm">{t(language, 'auth_login_success')}</p>
-          </div>
-        </div>
-      )}
-
       {/* 登出确认对话框 */}
       {showLogoutConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 animate-in fade-in zoom-in duration-200">
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm ${
+            logoutConfirmClosing ? 'animate-backdrop-fade-out' : 'animate-backdrop-fade-in'
+          }`}
+          onAnimationEnd={() => {
+            if (logoutConfirmClosing) {
+              setShowLogoutConfirm(false);
+              setLogoutConfirmClosing(false);
+              if (logoutConfirmActionRef.current === 'confirm') {
+                void logout();
+              }
+              logoutConfirmActionRef.current = null;
+            }
+          }}
+        >
+          <div
+            className={`bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 ${
+              logoutConfirmClosing ? 'animate-fade-out-scale' : 'animate-fade-in-scale'
+            }`}
+          >
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
                 <AlertCircle className="w-6 h-6 text-red-600" />
@@ -621,7 +642,10 @@ function AppInner() {
             <div className="flex gap-3 justify-end">
               <button
                 type="button"
-                onClick={() => setShowLogoutConfirm(false)}
+                onClick={() => {
+                  logoutConfirmActionRef.current = 'cancel';
+                  setLogoutConfirmClosing(true);
+                }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 {t(language, 'auth_cancel_button')}
@@ -629,8 +653,8 @@ function AppInner() {
               <button
                 type="button"
                 onClick={() => {
-                  setShowLogoutConfirm(false);
-                  void logout();
+                  logoutConfirmActionRef.current = 'confirm';
+                  setLogoutConfirmClosing(true);
                 }}
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
               >

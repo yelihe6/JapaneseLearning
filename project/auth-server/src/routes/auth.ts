@@ -104,21 +104,6 @@ router.post('/register', async (req, res) => {
     select: { id: true, email: true, displayName: true, createdAt: true },
   });
 
-  const payload = { sub: user.id, email: user.email };
-  const accessToken = signAccessToken(payload);
-
-  const refreshRaw = randomToken();
-  const refreshHash = sha256(refreshRaw);
-  await prisma.refreshToken.create({
-    data: {
-      tokenHash: refreshHash,
-      userId: user.id,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    },
-  });
-
-  setAuthCookies(res, accessToken, refreshRaw);
-
   return res.json({ user });
 });
 
